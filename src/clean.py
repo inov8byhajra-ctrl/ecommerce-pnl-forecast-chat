@@ -54,15 +54,22 @@ print("price <= 0:", (df["unit_price"] <= 0).sum())
 print("grand_total <= 0:", (df["grand_total"] <= 0).sum())
 print("quantity <= 0:", (df["quantity"] <= 0).sum())
 print(f"quantity > {MAX_QTY}:", (df["quantity"] > MAX_QTY).sum())
+MAX_ROW_VALUE = 500000  # unit_price x quantity above this is treated as an outlier
+
+print(f"price x qty > {MAX_ROW_VALUE}:", (df["unit_price"] * df["quantity"] > MAX_ROW_VALUE).sum())
 
 bad = (
     (df["unit_price"] <= 0)
     | (df["grand_total"] <= 0)
     | (df["quantity"] <= 0)
     | (df["quantity"] > MAX_QTY)
+    | (df["unit_price"] * df["quantity"] > MAX_ROW_VALUE)
 )
 print("Dropped (bad numbers, total):", bad.sum())
 df = df[~bad]
+before = len(df)
+df = df.drop_duplicates(subset=["order_id", "sku", "unit_price", "quantity", "status"])
+print("Dropped (duplicates):", before - len(df))
 
 # ---------- 7. Flag real sales (rows are kept, not deleted) ----------
 df["is_sale"] = df["status"].isin(SALE_STATUSES).astype(int)
