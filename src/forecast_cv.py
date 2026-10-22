@@ -2,24 +2,40 @@ import sqlite3
 import pandas as pd
 from prophet import Prophet
 from prophet.diagnostics import cross_validation
+from revenue_sql import DAILY_REVENUE_SQL
 
 DB_FILE = "data/processed/ecommerce.db"
 conn = sqlite3.connect(DB_FILE)
-d = pd.read_sql("""
-    SELECT order_date AS ds, SUM(unit_price * quantity - discount) AS y
-    FROM sales WHERE is_sale = 1 GROUP BY order_date
-""", conn)
+d = pd.read_sql(DAILY_REVENUE_SQL, conn)
 d["ds"] = pd.to_datetime(d["ds"])
 
 # weekly revenue (weeks end on Sunday); drop the partial first and last week
 w = d.set_index("ds")["y"].resample("W").sum().reset_index().iloc[1:-1]
-print("Weekly points:", len(w))
+print("Weekly points:", len(w), "|", w["ds"].min().date(), "to", w["ds"].max().date())
 
-# weeks far above their local median = sale-event weeks
-med = w["y"].rolling(9, center=True, min_periods=4).median()
-spikes = w[w["y"] > 2 * med]
-events = pd.DataFrame({"holiday": "sale_event", "ds": spikes["ds"]})
-print("Sale-event weeks:", len(events))
+# ---- KNOWN sale calendar (decided in advance, NOT found from the data) ----
+# Verify these against the real spikes in your data and edit if needed.
+SALE_CALENDAR = [
+    # 11.11
+    "2016-11-11", "2017-11-11",
+    # Black Friday
+    "2016-11-25", "2017-11-24",
+    # 12.12
+    "2016-12-12", "2017-12-12",
+    # 14 August (Independence Day sale)
+    "2016-08-14", "2017-08-14", "2018-08-14",
+    # Ramadan start
+    "2016-06-06", "2017-05-27", "2018-05-16",
+]
+
+def to_week_end(date):
+    d0 = pd.Timestamp(date)
+    return d0 + pd.Timedelta(days=6 - d0.weekday())  # that week's Sunday
+
+weeks = sorted({to_week_end(x) for x in SALE_CALENDAR})
+weeks = [x for x in weeks if x in set(w["ds"])]
+events = pd.DataFrame({"holiday": "sale_event", "ds": weeks})
+print("Calendar sale weeks inside data:", len(events))
 
 def wape(a, p):
     return abs(a - p).sum() / a.sum() * 100

@@ -1,7 +1,7 @@
 import sqlite3
 import pandas as pd
 from prophet import Prophet
-
+from revenue_sql import DAILY_REVENUE_SQL
 DB_FILE = "data/processed/ecommerce.db"
 HOLDOUT = 60       # last 60 days kept for testing
 SPIKE_MULT = 3     # a day above 3x its local median is a "sale event"
@@ -9,11 +9,7 @@ NAIVE_DAYS = 28    # naive baseline: median of last 28 days
 HORIZON = 30       # days to forecast
 
 conn = sqlite3.connect(DB_FILE)
-d = pd.read_sql("""
-    SELECT order_date AS ds, SUM(unit_price * quantity - discount) AS y
-    FROM sales WHERE is_sale = 1
-    GROUP BY order_date ORDER BY order_date
-""", conn)
+d = pd.read_sql(DAILY_REVENUE_SQL, conn)
 d["ds"] = pd.to_datetime(d["ds"])
 
 # fill missing days so the series is continuous
